@@ -69,3 +69,42 @@ navEls.forEach(el=>el.addEventListener('click',()=>{const target=el.dataset.targ
 let resizeTimer;addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{cancelAnimationFrame(raf);setup();last=0;if(!reduced)raf=requestAnimationFrame(animate)},200)});
 document.addEventListener('visibilitychange',()=>{cancelAnimationFrame(raf);if(!document.hidden&&!reduced){last=0;raf=requestAnimationFrame(animate)}});
 setup();if(!reduced)raf=requestAnimationFrame(animate);
+
+// Ambient bubbles across the full viewport. Decorative only: never block clicks.
+(function initAmbientBubbles(){
+ if(reduced)return;
+ const layer=document.createElement('div');layer.id='ambientBubbles';layer.setAttribute('aria-hidden','true');document.body.append(layer);
+ let ambient=[],frame=0,previous=0,resizeHandle;
+ const between=(a,b)=>a+Math.random()*(b-a);
+ function rebuild(){
+  layer.replaceChildren();ambient=[];
+  const w=innerWidth,h=innerHeight,small=w<650;
+  const count=small?10:19;
+  for(let i=0;i<count;i++){
+   const size=between(small?20:25,small?55:85);
+   const el=document.createElement('div');el.className='ambient-bubble';
+   el.style.setProperty('--bubble-size',size+'px');
+   el.style.setProperty('--bubble-opacity',between(.13,.28).toFixed(2));
+   layer.append(el);
+   ambient.push({el,size,x:between(0,Math.max(0,w-size)),y:between(0,Math.max(0,h-size)),vx:between(-.48,.48),vy:between(-.42,.42)});
+  }
+ }
+ function tick(t){
+  const dt=Math.min((t-(previous||t))/16.667,2);previous=t;
+  const w=innerWidth,h=innerHeight;
+  for(const b of ambient){
+   if(Math.abs(b.vx)<.12)b.vx=b.vx<0?-.12:.12;
+   if(Math.abs(b.vy)<.1)b.vy=b.vy<0?-.1:.1;
+   b.x+=b.vx*dt;b.y+=b.vy*dt;
+   if(b.x<=0){b.x=0;b.vx=Math.abs(b.vx)}
+   if(b.x>=w-b.size){b.x=Math.max(0,w-b.size);b.vx=-Math.abs(b.vx)}
+   if(b.y<=0){b.y=0;b.vy=Math.abs(b.vy)}
+   if(b.y>=h-b.size){b.y=Math.max(0,h-b.size);b.vy=-Math.abs(b.vy)}
+   b.el.style.transform=`translate3d(${b.x}px,${b.y}px,0)`;
+  }
+  frame=requestAnimationFrame(tick);
+ }
+ rebuild();frame=requestAnimationFrame(tick);
+ addEventListener('resize',()=>{clearTimeout(resizeHandle);resizeHandle=setTimeout(()=>{rebuild();previous=0},200)});
+ document.addEventListener('visibilitychange',()=>{cancelAnimationFrame(frame);if(!document.hidden){previous=0;frame=requestAnimationFrame(tick)}});
+})();
