@@ -30,12 +30,12 @@ function setup(){
   el.style.setProperty('--size',size+'px');
   const x=Math.max(5,Math.min(w-size-5,Number(el.dataset.x)*w-size/2));
   const y=Math.max(105,Math.min(h-size-35,Number(el.dataset.y)*h-size/2));
-  bubbles.push({el,size,x,y,vx:rand(-.8,.8)||.45,vy:rand(-.65,.65)||.3,nav:true});
+  bubbles.push({el,size,x,y,vx:rand(-1.05,1.05)||.65,vy:rand(-.85,.85)||.45,phase:rand(0,Math.PI*2),nav:true});
  });
  for(let i=0;i<(compact?13:25);i++){
   const size=rand(22,compact?56:84);
   const el=document.createElement('div');el.className='bubble decor-bubble';el.style.setProperty('--size',size+'px');el.setAttribute('aria-hidden','true');field.append(el);
-  bubbles.push({el,size,x:rand(0,Math.max(1,w-size)),y:rand(95,Math.max(96,h-size-35)),vx:rand(-1.2,1.2)||.7,vy:rand(-1,1)||.6,nav:false});
+  bubbles.push({el,size,x:rand(0,Math.max(1,w-size)),y:rand(95,Math.max(96,h-size-35)),vx:rand(-1.25,1.25)||.75,vy:rand(-1,1)||.65,phase:rand(0,Math.PI*2),nav:false});
  }
  draw();
 }
@@ -44,18 +44,29 @@ function animate(now){
  const dt=Math.min((now-(last||now))/16.667,2);last=now;
  const w=field.clientWidth,h=field.clientHeight;
  for(const b of bubbles){
+  // Linked bubbles gently gravitate towards the cursor; decorative ones flee.
   if(pointer.active){
-   const dx=b.x+b.size/2-pointer.x,dy=b.y+b.size/2-pointer.y;
-   const d=Math.hypot(dx,dy)||1,range=b.nav?140:110;
-   if(d<range){const strength=(1-d/range)*.12;b.vx+=dx/d*strength*dt;b.vy+=dy/d*strength*dt;}
+   const dx=pointer.x-(b.x+b.size/2),dy=pointer.y-(b.y+b.size/2);
+   const d=Math.hypot(dx,dy)||1;
+   if(b.nav && d<350){
+    const pull=(1-d/350)*0.22;
+    b.vx+=dx/d*pull*dt;b.vy+=dy/d*pull*dt;
+   }else if(!b.nav && d<190){
+    const push=(1-d/190)*0.65;
+    b.vx-=dx/d*push*dt;b.vy-=dy/d*push*dt;
+   }
   }
-  // Continuous movement across the hero, not oscillation around a fixed anchor.
+  // Friction lets the mouse impulse fade; gentle currents keep them drifting.
+  b.vx*=Math.pow(b.nav?.992:.984,dt);
+  b.vy*=Math.pow(b.nav?.992:.984,dt);
+  b.vx+=Math.sin(now*.00048+b.phase)*.005*dt;
+  b.vy+=Math.cos(now*.00039+b.phase)*.005*dt;
   const speed=Math.hypot(b.vx,b.vy);
-  const minSpeed=b.nav?.45:.6,maxSpeed=b.nav?1.1:1.55;
-  if(speed<minSpeed){b.vx=(b.vx||.5)*1.04;b.vy=(b.vy||.4)*1.04;}
+  const minSpeed=b.nav?.42:.48,maxSpeed=b.nav?1.85:2.0;
+  if(speed<minSpeed){b.vx+=Math.cos(b.phase+now*.0002)*.014*dt;b.vy+=Math.sin(b.phase+now*.0002)*.014*dt;}
   if(speed>maxSpeed){b.vx*=maxSpeed/speed;b.vy*=maxSpeed/speed;}
   b.x+=b.vx*dt;b.y+=b.vy*dt;
-  const left=5,right=Math.max(left,w-b.size-5),top=compact?95:105,bottom=Math.max(top,h-b.size-35);
+  const left=5,right=Math.max(left,w-b.size-5),top=w<650?95:105,bottom=Math.max(top,h-b.size-35);
   if(b.x<=left){b.x=left;b.vx=Math.abs(b.vx)}
   if(b.x>=right){b.x=right;b.vx=-Math.abs(b.vx)}
   if(b.y<=top){b.y=top;b.vy=Math.abs(b.vy)}
@@ -70,31 +81,48 @@ let resizeTimer;addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeT
 document.addEventListener('visibilitychange',()=>{cancelAnimationFrame(raf);if(!document.hidden&&!reduced){last=0;raf=requestAnimationFrame(animate)}});
 setup();if(!reduced)raf=requestAnimationFrame(animate);
 
-// Ambient bubbles across the full viewport. Decorative only: never block clicks.
+// Very light, slow, cursor-repelled bubbles on EVERY section of the website.
 (function initAmbientBubbles(){
  if(reduced)return;
  const layer=document.createElement('div');layer.id='ambientBubbles';layer.setAttribute('aria-hidden','true');document.body.append(layer);
  let ambient=[],frame=0,previous=0,resizeHandle;
+ const mouse={x:0,y:0,active:false};
  const between=(a,b)=>a+Math.random()*(b-a);
+ addEventListener('pointermove',e=>{
+  if(e.pointerType==='touch')return;
+  mouse.x=e.clientX;mouse.y=e.clientY;mouse.active=true;
+ },{passive:true});
+ document.addEventListener('pointerleave',()=>mouse.active=false);
  function rebuild(){
   layer.replaceChildren();ambient=[];
   const w=innerWidth,h=innerHeight,small=w<650;
-  const count=small?10:19;
+  const count=small?10:22;
   for(let i=0;i<count;i++){
-   const size=between(small?20:25,small?55:85);
+   const size=between(small?20:26,small?53:78);
    const el=document.createElement('div');el.className='ambient-bubble';
    el.style.setProperty('--bubble-size',size+'px');
-   el.style.setProperty('--bubble-opacity',between(.13,.28).toFixed(2));
+   el.style.setProperty('--bubble-opacity',between(.22,.38).toFixed(2));
    layer.append(el);
-   ambient.push({el,size,x:between(0,Math.max(0,w-size)),y:between(0,Math.max(0,h-size)),vx:between(-.48,.48),vy:between(-.42,.42)});
+   ambient.push({el,size,x:between(0,Math.max(0,w-size)),y:between(0,Math.max(0,h-size)),vx:between(-.85,.85),vy:between(-.70,.70),phase:between(0,Math.PI*2)});
   }
  }
  function tick(t){
   const dt=Math.min((t-(previous||t))/16.667,2);previous=t;
   const w=innerWidth,h=innerHeight;
   for(const b of ambient){
-   if(Math.abs(b.vx)<.12)b.vx=b.vx<0?-.12:.12;
-   if(Math.abs(b.vy)<.1)b.vy=b.vy<0?-.1:.1;
+   if(mouse.active){
+    const dx=b.x+b.size/2-mouse.x,dy=b.y+b.size/2-mouse.y;
+    const dist=Math.hypot(dx,dy)||1,range=185;
+    if(dist<range){const force=(1-dist/range)*.52;
+     b.vx+=dx/dist*force*dt;b.vy+=dy/dist*force*dt;
+    }
+   }
+   b.vx*=Math.pow(.987,dt);b.vy*=Math.pow(.987,dt);
+   b.vx+=Math.sin(t*.00053+b.phase)*.006*dt;
+   b.vy+=Math.cos(t*.00041+b.phase)*.006*dt;
+   const speed=Math.hypot(b.vx,b.vy);
+   if(speed<.45){b.vx+=Math.cos(b.phase+t*.00019)*.018*dt;b.vy+=Math.sin(b.phase+t*.00019)*.018*dt;}
+   if(speed>1.85){b.vx*=1.85/speed;b.vy*=1.85/speed;}
    b.x+=b.vx*dt;b.y+=b.vy*dt;
    if(b.x<=0){b.x=0;b.vx=Math.abs(b.vx)}
    if(b.x>=w-b.size){b.x=Math.max(0,w-b.size);b.vx=-Math.abs(b.vx)}
